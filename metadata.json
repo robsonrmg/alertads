@@ -1,0 +1,6 @@
+{
+  "name": "AlertAds",
+  "description": "Plataforma de monitoramento de tráfego pago e disparo de alertas no WhatsApp para agências premium.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
