@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ShieldAlert, ArrowRight, Lock, Mail, Server } from 'lucide-react';
+import { ShieldAlert, ArrowRight, Lock, Mail, AlertTriangle, CheckCircle } from 'lucide-react';
 import { Page } from '../types';
+import { supabase, getSupabaseConfig } from '../lib/supabase/client';
 
 interface LoginPageProps {
   onNavigate: (page: Page) => void;
@@ -9,16 +10,86 @@ interface LoginPageProps {
 
 export default function LoginPage({ onNavigate, onLoginSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('gestor@agenciapremium.com.br');
-  const [password, setPassword] = useState('•••••••••');
+  const [password, setPassword] = useState('123456');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { isConfigured } = getSupabaseConfig();
+
+  const handleForgotPassword = async () => {
+    if (!email || email === 'gestor@agenciapremium.com.br') {
+      setErrorMsg('Por favor, digite um e-mail válido para recuperar a senha.');
+      return;
+    }
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setLoading(true);
+
+    try {
+      if (!isConfigured) {
+        // Mock success in offline mode
+        setTimeout(() => {
+          setSuccessMsg('E-mail de recuperação simulado com sucesso (Supabase offline).');
+          setLoading(false);
+        }, 1000);
+        return;
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+
+      if (error) {
+        setErrorMsg(`Erro Supabase: ${error.message}`);
+      } else {
+        setSuccessMsg('E-mail de redefinição de senha enviado com sucesso! Verifique sua caixa de entrada.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Falha ao solicitar redefinição.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    // Bypass / demo checking
+    if (email === 'gestor@agenciapremium.com.br' && password === '123456' && !isConfigured) {
+      setTimeout(() => {
+        setLoading(false);
+        onLoginSuccess();
+      }, 800);
+      return;
+    }
+
+    try {
+      if (!isConfigured) {
+        // If developer has not configured keys yet, warn user but let them test with mock credentials too
+        setErrorMsg('Supabase não foi configurado por variáveis de ambiente. Por favor, crie seu banco ou continue com as credenciais demo: gestor@agenciapremium.com.br / 123456.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setErrorMsg(`Erro de Autenticação: ${error.message}`);
+      } else if (data?.user) {
+        onLoginSuccess();
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro inesperado de login.');
+    } finally {
       setLoading(false);
-      onLoginSuccess();
-    }, 800);
+    }
   };
 
   return (
@@ -50,11 +121,31 @@ export default function LoginPage({ onNavigate, onLoginSuccess }: LoginPageProps
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-xl shadow-slate-250/20 border border-[#E2E8F0] sm:rounded-2xl sm:px-10">
           
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-            <p className="text-xs text-[#2563EB] leading-relaxed">
-              <strong>Modo de Demonstração Ativo:</strong> Clique em "Acessar Plataforma" diretamente para simular o painel sob visualização autenticada com as credenciais demo.
-            </p>
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-xl text-xs">
+            {isConfigured ? (
+              <p className="text-[#1E3A8A] leading-relaxed">
+                🟢 <strong>Supabase Conectado:</strong> Insira seu e-mail e senha cadastrados para acessar com dados reais persistidos na nuvem.
+              </p>
+            ) : (
+              <p className="text-[#2563EB] leading-relaxed">
+                ℹ️ <strong>Demonstração Ativa:</strong> Você pode usar as credenciais padrão de teste: <span className="font-mono bg-blue-100 px-1 py-0.5 rounded text-amber-800">gestor@agenciapremium.com.br</span> e senha <span className="font-mono bg-blue-100 px-1 py-0.5 rounded text-amber-800">123456</span> para testar imediatamente o painel.
+              </p>
+            )}
           </div>
+
+          {errorMsg && (
+            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start space-x-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-start space-x-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span>{successMsg}</span>
+            </div>
+          )}
 
           <form id="login-form" className="space-y-6" onSubmit={handleSubmit}>
             <div>
@@ -114,7 +205,11 @@ export default function LoginPage({ onNavigate, onLoginSuccess }: LoginPageProps
               </div>
 
               <div className="text-xs">
-                <button type="button" className="font-semibold text-[#2563EB] hover:text-[#1D4ED8]">
+                <button 
+                  type="button" 
+                  onClick={handleForgotPassword}
+                  className="font-semibold text-[#2563EB] hover:text-[#1D4ED8]"
+                >
                   Esqueceu a senha?
                 </button>
               </div>

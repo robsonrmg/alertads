@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ShieldAlert, ArrowRight, CheckCircle, Mail, User, Building, Smartphone, FileSpreadsheet } from 'lucide-react';
+import { ShieldAlert, ArrowRight, CheckCircle, Mail, User, Building, Smartphone, Lock, AlertTriangle } from 'lucide-react';
 import { Page } from '../types';
+import { supabase, getSupabaseConfig } from '../lib/supabase/client';
 
 interface SignUpPageProps {
   onNavigate: (page: Page) => void;
@@ -10,21 +11,67 @@ interface SignUpPageProps {
 export default function SignUpPage({ onNavigate, onSignUpSuccess }: SignUpPageProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [agencyName, setAgencyName] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { isConfigured } = getSupabaseConfig();
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
+    setErrorMsg(null);
+
+    // Dynamic credentials fallback
+    if (!isConfigured) {
+      setTimeout(() => {
+        setLoading(false);
+        onSignUpSuccess(
+          email || 'gestor@agenciapremium.com.br', 
+          agencyName || 'Agência Premium Partners', 
+          phone || '5511999998888'
+        );
+      }, 850);
+      return;
+    }
+
+    try {
+      if (password.length < 6) {
+        setErrorMsg('A senha precisa ter pelo menos 6 caracteres.');
+        setLoading(false);
+        return;
+      }
+
+      // Execute real Supabase user singup with metadata for handling trigger!
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+            phone: phone,
+            agency_name: agencyName
+          }
+        }
+      });
+
+      if (error) {
+        setErrorMsg(`Erro de Cadastro: ${error.message}`);
+      } else {
+        // Fetch or create profile
+        onSignUpSuccess(
+          email,
+          agencyName || 'Agência Premium',
+          phone
+        );
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Falha ao processar cadastro no Supabase.');
+    } finally {
       setLoading(false);
-      onSignUpSuccess(
-        email || 'gestor@agenciapremium.com.br', 
-        agencyName || 'Agência Premium Partners', 
-        phone || '5511999998888'
-      );
-    }, 850);
+    }
   };
 
   return (
@@ -53,7 +100,7 @@ export default function SignUpPage({ onNavigate, onSignUpSuccess }: SignUpPagePr
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-2xl">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-3xl">
         <div className="bg-white py-8 px-4 shadow-xl border border-[#E2E8F0] sm:rounded-2xl sm:px-10 grid grid-cols-1 md:grid-cols-12 gap-8">
           
           {/* Left Column: Visual instructions */}
@@ -88,6 +135,13 @@ export default function SignUpPage({ onNavigate, onSignUpSuccess }: SignUpPagePr
 
           {/* Right Column: Interactive Form */}
           <form id="signup-form" className="md:col-span-7 space-y-4" onSubmit={handleSubmit}>
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-start space-x-2">
+                <AlertTriangle className="w-4.5 h-4.5 text-rose-600 shrink-0 mt-0.5" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
             <div>
               <label htmlFor="fullname" className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
                 Nome do Gestor
@@ -124,6 +178,26 @@ export default function SignUpPage({ onNavigate, onSignUpSuccess }: SignUpPagePr
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 focus:border-[#2563EB] bg-white text-[#0F172A]"
                   placeholder="exemplo@suaagencia.com.br"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="pass-signup" className="block text-xs font-semibold uppercase tracking-wider text-[#64748B] mb-1">
+                Senha para Acesso
+              </label>
+              <div className="relative rounded-md shadow-sm">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#64748B]">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <input
+                  id="pass-signup"
+                  required
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2.5 border border-[#E2E8F0] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#2563EB]/40 focus:border-[#2563EB] bg-white text-[#0F172A]"
+                  placeholder="Mínimo de 6 caracteres"
                 />
               </div>
             </div>
