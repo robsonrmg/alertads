@@ -137,7 +137,7 @@ export default function App() {
               activeCampaigns: 6,
               spend24h: 420.00,
               unusualActivityCount: 0,
-              lastSync: 'Sincronizado via Supabase ' + new Date(m.created_at).toLocaleTimeString()
+              lastSync: 'Sincronizado via Banco ' + new Date(m.created_at).toLocaleTimeString()
             }));
             setAccounts(mappedAccounts);
           } else {
@@ -155,14 +155,14 @@ export default function App() {
           if (alertsData && alertsData.length > 0) {
             const mappedAlerts: Alert[] = alertsData.map(a => ({
               id: a.id,
-              title: 'Alerta de Anúncio - Supabase',
+              title: 'Alerta de Anúncio - Sistema',
               accountName: 'Monitor Ativo',
               platform: 'facebook',
               severity: (a.type || 'info') as any,
               timestamp: 'Sincronizado',
               status: (a.status || 'active') as any,
               message: a.message,
-              technicalReason: 'Alerta persistido via Supabase Database.',
+              technicalReason: 'Alerta persistido em Banco Corporativo.',
               recommendation: 'Acesse o painel do gerenciador para solucionar.'
             }));
             setAlerts(mappedAlerts);
@@ -280,17 +280,28 @@ export default function App() {
 
   const handleDeleteAccount = async (id: string) => {
     const isUuid = id.length > 20;
-    setAccounts(accounts.filter(acc => acc.id !== id));
 
     if (isConfigured && sessionUser && isUuid) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('monitors')
           .delete()
           .eq('id', id);
+
+        if (error) {
+          console.error('Failed to delete monitor from database:', error);
+          throw new Error(error.message);
+        }
+
+        // Transação concluída com sucesso, atualiza o estado local
+        setAccounts(prev => prev.filter(acc => acc.id !== id));
       } catch (err) {
-        console.error('Failed to delete monitor from Supabase:', err);
+        console.error('Failed to delete monitor:', err);
+        throw err; // Propagar o erro para quem o chamou
       }
+    } else {
+      // Local/offline ou fallback do sandbox
+      setAccounts(prev => prev.filter(acc => acc.id !== id));
     }
   };
 
@@ -603,7 +614,7 @@ export default function App() {
                 {isConfigured ? (
                   <span className="flex items-center space-x-1.5 px-2.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-[10px] font-bold">
                     <Database className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Supabase Integrado</span>
+                    <span>Nuvem Integrada</span>
                   </span>
                 ) : (
                   <button 
@@ -614,7 +625,7 @@ export default function App() {
                     className="flex items-center space-x-1 px-2.5 py-0.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-full text-[10px] font-semibold transition cursor-pointer"
                   >
                     <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    <span>Integrar Supabase Local</span>
+                    <span>Conectar Banco de Dados</span>
                   </button>
                 )}
               </div>
@@ -652,7 +663,7 @@ export default function App() {
                 <div className="flex items-center space-x-2">
                   <Database className="w-4 h-4 text-amber-600 shrink-0" />
                   <span>
-                    <strong>Supabase não conectado:</strong> Os dados estão rodando em modo simulação offline. Você pode integrar suas chaves Supabase instantaneamente.
+                    <strong>Servidor em Nuvem offline:</strong> Os dados estão rodando em modo simulação offline. Você pode integrar suas chaves de acesso à API instantaneamente.
                   </span>
                 </div>
                 <button 
@@ -673,14 +684,14 @@ export default function App() {
                       <Database className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-[#0F172A] text-sm">Conectar Painel ao Supabase</h3>
+                      <h3 className="font-bold text-[#0F172A] text-sm">Conectar Painel ao Servidor</h3>
                       <p className="text-[10px] text-[#64748B]">Suas chaves serão salvas localmente no localStorage com segurança.</p>
                     </div>
                   </div>
 
                   <form onSubmit={handleSaveDynamicCreds} className="space-y-3.5 text-xs text-slate-700">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">SUPABASE URL</label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">ENDEREÇO DO SERVIDOR</label>
                       <input 
                         required
                         type="url" 
@@ -691,7 +702,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">SUPABASE ANON KEY</label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1">CHAVE DE ACESSO ATIVA</label>
                       <input 
                         required
                         type="password" 
@@ -703,7 +714,7 @@ export default function App() {
                     </div>
 
                     <div className="pt-2 flex items-center justify-end space-x-2">
-                      <button 
+                       <button 
                         type="button"
                         onClick={() => setShowConfigModal(false)}
                         className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
@@ -727,7 +738,7 @@ export default function App() {
               {dbLoading && (
                 <div className="mb-4 p-2.5 bg-blue-50 border border-blue-100 text-blue-800 text-xs rounded-xl flex items-center space-x-2 animate-pulse">
                   <div className="w-4 h-4 border-2 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
-                  <span>Sincronizando tabelas com o Supabase carregado...</span>
+                  <span>Sincronizando tabelas com o banco carregado...</span>
                 </div>
               )}
               <div className="max-w-7xl mx-auto">
