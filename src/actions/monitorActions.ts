@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { supabase, getSupabaseConfig } from '../lib/supabase/client';
+import { calculateNextCheck } from '../services/monitoring/calculate-next-check';
 
 // 1. Zod Validation Schema for pristine inputs
 export const monitorSchema = z.object({
@@ -30,6 +31,8 @@ export interface MonitorRecord {
   email: string;
   whatsapp_number: string;
   is_active: boolean;
+  last_checked_at?: string | null;
+  next_check_at?: string | null;
   created_at: string;
 }
 
@@ -122,7 +125,9 @@ export async function createMonitorAction(input: MonitorInput): Promise<{ succes
         frequency: parsed.data.frequency || 'hourly',
         email: parsed.data.email || null,
         whatsapp_number: parsed.data.whatsapp_number || null,
-        is_active: parsed.data.is_active
+        is_active: parsed.data.is_active,
+        last_checked_at: null,
+        next_check_at: calculateNextCheck(parsed.data.frequency || 'hourly')
       })
       .select()
       .single();
@@ -164,7 +169,8 @@ export async function updateMonitorAction(id: string, input: MonitorInput): Prom
         frequency: parsed.data.frequency,
         email: parsed.data.email || null,
         whatsapp_number: parsed.data.whatsapp_number || null,
-        is_active: parsed.data.is_active
+        is_active: parsed.data.is_active,
+        next_check_at: calculateNextCheck(parsed.data.frequency || 'hourly')
       })
       .eq('id', id)
       .eq('user_id', userId) // security isolation double-check

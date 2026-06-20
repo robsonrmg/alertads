@@ -449,7 +449,13 @@ export default function App() {
           />
         );
       case 'settings':
-        return <SettingsView onSaveConfig={handleSaveConfig} />;
+        return (
+          <SettingsView 
+            onSaveConfig={handleSaveConfig} 
+            onUpdateName={(newName: string) => setUserAgency(newName)}
+            onUpdatePhone={(newPhone: string) => setUserPhone(newPhone)}
+          />
+        );
       
       default:
         return <LandingPage onNavigate={handleNavigate} />;

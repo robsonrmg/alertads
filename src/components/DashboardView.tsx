@@ -12,9 +12,12 @@ import {
   Chrome,
   Terminal,
   Copy,
-  Check
+  Check,
+  Clock,
+  Play
 } from 'lucide-react';
 import { AdAccount, Alert, Page } from '../types';
+import { checkAllMonitors } from '../services/monitoring/check-monitor';
 
 interface DashboardViewProps {
   accounts: AdAccount[];
@@ -25,6 +28,45 @@ interface DashboardViewProps {
 
 export default function DashboardView({ accounts, alerts, onNavigate, onResolveAlert }: DashboardViewProps) {
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [running, setRunning] = React.useState(false);
+  const [lastRun, setLastRun] = React.useState<string>(() => {
+    return localStorage.getItem('alertads_last_run') || 'Aguardando primeira execução';
+  });
+  const [nextRun, setNextRun] = React.useState<string>(() => {
+    return localStorage.getItem('alertads_next_run') || 'Aguardando início';
+  });
+  const [cronStatus, setCronStatus] = React.useState<string>('Ativo');
+
+  const handleTriggerCron = async () => {
+    setRunning(true);
+    setCronStatus('Verificando...');
+    try {
+      const result = await checkAllMonitors();
+      const nowStr = new Date().toLocaleTimeString('pt-BR');
+      const nextStr = new Date(Date.now() + 5 * 60 * 1000).toLocaleTimeString('pt-BR');
+      setLastRun(nowStr);
+      setNextRun(`${nextStr} (Em 5 min)`);
+      localStorage.setItem('alertads_last_run', nowStr);
+      localStorage.setItem('alertads_next_run', `${nextStr} (Em 5 min)`);
+      
+      if (result.success) {
+        const anyAnomalies = result.results.filter(r => r.alertGenerated).length;
+        if (anyAnomalies > 0) {
+          setCronStatus(`🔴 Instável (${anyAnomalies} alertas)`);
+        } else {
+          setCronStatus('🟢 Saudável');
+        }
+        window.location.reload(); 
+      } else {
+        setCronStatus('🟢 Simulação Offline');
+      }
+    } catch (e: any) {
+      setCronStatus('🔴 Falha');
+      console.error(e);
+    } finally {
+      setRunning(false);
+    }
+  };
 
   const activeAlerts = alerts.filter(a => a.status === 'active');
   const criticalCount = activeAlerts.filter(a => a.severity === 'critical').length;
@@ -59,6 +101,48 @@ export default function DashboardView({ accounts, alerts, onNavigate, onResolveA
           <span className="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-slate-600 font-medium font-mono text-[11px]">
             Último Sync: Há 5s
           </span>
+        </div>
+      </div>
+
+      {/* Painel do Motor de Varredura Automatizada (Etapa 6 do projeto AlertAds) */}
+      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 text-blue-800 border border-blue-100 rounded text-[9px] font-extrabold uppercase tracking-wider">
+              Motor Vigilante (Etapa 6)
+            </span>
+            <h3 className="font-extrabold text-[#0F172A] text-sm">Status de Varredura do Robô Vigilante</h3>
+            <p className="text-[11px] text-[#64748B]">
+              Seu tráfego é analisado periodicamente em segundo plano. Use o botão abaixo para simular ou disparar a rotina agora.
+            </p>
+          </div>
+          
+          <button
+            onClick={handleTriggerCron}
+            disabled={running}
+            className="flex items-center justify-center space-x-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold text-xs px-5 py-3 rounded-xl shadow-md transition cursor-pointer disabled:opacity-50"
+          >
+            <Play className={`w-3.5 h-3.5 fill-current ${running ? 'animate-pulse' : ''}`} />
+            <span>{running ? 'Rodando Varredura...' : 'Disparar Varredura (Cron)'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 pt-4 border-t border-slate-200/60 text-xs text-[#0F172A]">
+          <div className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+            <span className="text-slate-500 font-medium">Última Execução:</span>
+            <strong className="text-slate-900 font-mono font-bold text-right">{lastRun}</strong>
+          </div>
+          <div className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+            <span className="text-slate-500 font-medium">Próxima Execução:</span>
+            <strong className="text-blue-600 font-mono font-bold animate-pulse text-right">{nextRun}</strong>
+          </div>
+          <div className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between">
+            <span className="text-slate-500 font-medium">Status do Monitoramento:</span>
+            <span className="inline-flex items-center font-extrabold text-right justify-end">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-ping" />
+              {cronStatus}
+            </span>
+          </div>
         </div>
       </div>
 

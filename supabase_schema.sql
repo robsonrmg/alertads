@@ -73,9 +73,12 @@ USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
 -- 9. Define RLS Policies for Alerts
-CREATE POLICY "Users can manage their own alerts" 
-ON public.alerts FOR ALL 
-USING (auth.uid() = user_id)
+CREATE POLICY "users_can_view_own_alerts" 
+ON public.alerts FOR SELECT 
+USING (auth.uid() = user_id);
+
+CREATE POLICY "users_can_insert_own_alerts" 
+ON public.alerts FOR INSERT 
 WITH CHECK (auth.uid() = user_id);
 
 -- 10. Define RLS Policies for Notification Settings
