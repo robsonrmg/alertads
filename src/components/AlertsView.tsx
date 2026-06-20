@@ -13,10 +13,13 @@ import {
   Sparkles,
   Smartphone,
   Trash2,
-  ListFilter
+  ListFilter,
+  Mail,
+  Clock
 } from 'lucide-react';
 import { Alert, Platform, AlertSeverity } from '../types';
 import { ERROR_TEMPLATES, generateWhatsAppAlert } from '../services/mockData';
+import { supabase, getSupabaseConfig } from '../lib/supabase/client';
 
 interface AlertsViewProps {
   alerts: Alert[];
@@ -29,6 +32,119 @@ export default function AlertsView({ alerts, onResolveAlert, onAddCustomAlert, o
   const [severityFilter, setSeverityFilter] = useState<'all' | AlertSeverity>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resolved'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Notification queue states and load handlers
+  const [queueItems, setQueueItems] = useState<any[]>([]);
+  const [notifChannelFilter, setNotifChannelFilter] = useState<'all' | 'email' | 'whatsapp'>('all');
+  const [notifStatusFilter, setNotifStatusFilter] = useState<'all' | 'pending' | 'processing' | 'sent' | 'failed'>('all');
+
+  const loadNotificationQueue = React.useCallback(async () => {
+    const { isConfigured } = getSupabaseConfig();
+    if (!isConfigured) {
+      setQueueItems([
+        {
+          id: 'nq_1',
+          created_at: new Date(Date.now() - 50000).toISOString(),
+          status: 'sent',
+          email_enabled: true,
+          whatsapp_enabled: true,
+          attempts: 1,
+          last_attempt_at: new Date(Date.now() - 40000).toISOString(),
+          monitor_name: 'Meta Ads - Vanguard Ecommerce',
+          error_message: null
+        },
+        {
+          id: 'nq_2',
+          created_at: new Date(Date.now() - 150000).toISOString(),
+          status: 'sent',
+          email_enabled: false,
+          whatsapp_enabled: true,
+          attempts: 1,
+          last_attempt_at: new Date(Date.now() - 140000).toISOString(),
+          monitor_name: 'Google Ads - Vanguard Principal',
+          error_message: null
+        },
+        {
+          id: 'nq_3',
+          created_at: new Date(Date.now() - 300000).toISOString(),
+          status: 'failed',
+          email_enabled: true,
+          whatsapp_enabled: false,
+          attempts: 3,
+          last_attempt_at: new Date(Date.now() - 250000).toISOString(),
+          monitor_name: 'Meta Ads - Reprovação Geral',
+          error_message: 'RESEND_API_KEY falhou ou domínio não verificado'
+        }
+      ]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('notification_queue')
+        .select(`
+          *,
+          alerts (
+            message,
+            type,
+            monitors (
+              name
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      const mapped = (data || []).map((item: any) => ({
+        ...item,
+        monitor_name: item.alerts?.monitors?.name || 'Monitoramento Desconhecido'
+      }));
+      
+      setQueueItems(mapped);
+    } catch (err) {
+      console.warn('[LOAD QUEUE] Usando dados simulados:', err);
+      setQueueItems([
+        {
+          id: 'nq_1',
+          created_at: new Date(Date.now() - 50000).toISOString(),
+          status: 'sent',
+          email_enabled: true,
+          whatsapp_enabled: true,
+          attempts: 1,
+          last_attempt_at: new Date(Date.now() - 40000).toISOString(),
+          monitor_name: 'Meta Ads - Vanguard Ecommerce',
+          error_message: null
+        },
+        {
+          id: 'nq_2',
+          created_at: new Date(Date.now() - 150000).toISOString(),
+          status: 'sent',
+          email_enabled: false,
+          whatsapp_enabled: true,
+          attempts: 1,
+          last_attempt_at: new Date(Date.now() - 140000).toISOString(),
+          monitor_name: 'Google Ads - Vanguard Principal',
+          error_message: null
+        },
+        {
+          id: 'nq_3',
+          created_at: new Date(Date.now() - 300000).toISOString(),
+          status: 'failed',
+          email_enabled: true,
+          whatsapp_enabled: false,
+          attempts: 3,
+          last_attempt_at: new Date(Date.now() - 250000).toISOString(),
+          monitor_name: 'Meta Ads - Reprovação Geral',
+          error_message: 'RESEND_API_KEY falhou ou domínio não verificado'
+        }
+      ]);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadNotificationQueue();
+  }, [loadNotificationQueue]);
 
   // Playground States
   const [selectedTemplateId, setSelectedTemplateId] = useState(ERROR_TEMPLATES[0].id);
@@ -51,6 +167,17 @@ export default function AlertsView({ alerts, onResolveAlert, onAddCustomAlert, o
                       (statusFilter === 'active' && item.status === 'active') || 
                       (statusFilter === 'resolved' && item.status === 'resolved');
     return sevMatch && statMatch;
+  });
+
+  const filteredQueueItems = queueItems.filter(item => {
+    let channelMatch = true;
+    if (notifChannelFilter === 'email') {
+      channelMatch = item.email_enabled === true;
+    } else if (notifChannelFilter === 'whatsapp') {
+      channelMatch = item.whatsapp_enabled === true;
+    }
+    const statusMatch = notifStatusFilter === 'all' || item.status === notifStatusFilter;
+    return channelMatch && statusMatch;
   });
 
   const handleCopyAlert = (id: string, text: string) => {
@@ -479,6 +606,136 @@ ${item.technicalReason}
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto opacity-60 mb-3" />
               <span className="font-bold text-sm text-[#0F172A]">Tudo Limpo!</span>
               <p className="text-xs text-[#64748B] mt-1">Nenhum alerta pendente com esses filtros selecionados.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* SEÇÃO EXTRA ETAPA 7: FILA E HISTÓRICO DE TRANSMISSÃO */}
+      <div className="bg-white border border-[#E2E8F0] rounded-2xl shadow-sm overflow-hidden mt-6">
+        
+        {/* Table Filters header */}
+        <div className="p-5 border-b border-[#E2E8F0] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <span className="inline-flex items-center px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[9px] font-extrabold uppercase tracking-wider mb-1">
+              Gateway de Tráfego (Etapa 7)
+            </span>
+            <h3 className="font-extrabold text-sm text-[#0F172A]">Fila de Notificações / Transmissões</h3>
+            <p className="text-[10px] text-[#64748B]">Logs em tempo real de disparos para e-mail e WhatsApp</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs font-semibold">
+            {/* Canal filter */}
+            <div className="flex items-center space-x-1.5 font-sans">
+              <span className="text-[10px] uppercase font-bold text-[#64748B]">Canal:</span>
+              <select 
+                value={notifChannelFilter} 
+                onChange={(e) => setNotifChannelFilter(e.target.value as any)}
+                className="border border-[#E2E8F0] rounded-lg p-1.5 bg-white text-slate-700 font-bold"
+              >
+                <option value="all">Todos os Canais</option>
+                <option value="email">📧 E-mail</option>
+                <option value="whatsapp">💬 WhatsApp</option>
+              </select>
+            </div>
+
+            {/* Status filter */}
+            <div className="flex items-center space-x-1.5 font-sans">
+              <span className="text-[10px] uppercase font-bold text-[#64748B]">Status Fila:</span>
+              <select 
+                value={notifStatusFilter} 
+                onChange={(e) => setNotifStatusFilter(e.target.value as any)}
+                className="border border-[#E2E8F0] rounded-lg p-1.5 bg-white text-slate-700 font-bold"
+              >
+                <option value="all">Todos os Status</option>
+                <option value="pending">Aguardando Envio</option>
+                <option value="processing">Transmitindo...</option>
+                <option value="sent">Sucesso (Enviado)</option>
+                <option value="failed">Erro no Disparo</option>
+              </select>
+            </div>
+
+            <button
+              onClick={loadNotificationQueue}
+              className="p-1.5 hover:bg-slate-50 border border-slate-200 rounded-lg text-[#64748B] cursor-pointer"
+              title="Recarregar Fila"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* List of elements */}
+        <div className="divide-y divide-[#E2E8F0] text-xs">
+          {filteredQueueItems.map((item) => {
+            const isEmail = item.email_enabled;
+            const isWA = item.whatsapp_enabled;
+            const isSent = item.status === 'sent';
+            const isFailed = item.status === 'failed';
+            const isProcessing = item.status === 'processing';
+
+            return (
+              <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/40 transition">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-extrabold text-slate-900">{item.monitor_name}</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-500 font-mono text-[10px]">ID Queue: #{item.id.slice(0,6)}</span>
+                  </div>
+
+                  {/* Channels indicators */}
+                  <div className="flex items-center space-x-3 text-[10px] font-bold">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${
+                      isEmail ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-slate-50 text-slate-400 border border-slate-200 line-through'
+                    }`}>
+                      <Mail className="w-2.5 h-2.5 mr-1 shrink-0" />
+                      E-mail {isEmail ? 'Ativado' : 'Inativo'}
+                    </span>
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded ${
+                      isWA ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-50 text-slate-400 border border-slate-200 line-through'
+                    }`}>
+                      <MessageSquare className="w-2.5 h-2.5 mr-1 shrink-0" />
+                      WhatsApp {isWA ? 'Ativado' : 'Inativo'}
+                    </span>
+                  </div>
+
+                  {/* Errors block */}
+                  {isFailed && item.error_message && (
+                    <div className="text-[10px] bg-red-50 text-red-700 font-semibold p-2 border border-red-100 rounded-lg mt-1 max-w-lg">
+                      🚨 Falha Operacional: {item.error_message}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex sm:flex-col items-start sm:items-end justify-between sm:justify-start gap-1 shrink-0 text-right">
+                  {/* Status Badge */}
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                    isSent 
+                      ? 'bg-emerald-100 text-emerald-800' 
+                      : isFailed 
+                        ? 'bg-red-100 text-red-800'
+                        : isProcessing 
+                          ? 'bg-amber-100 text-amber-800 animate-pulse'
+                          : 'bg-slate-100 text-slate-800'
+                  }`}>
+                    {isSent ? '✓ ENVIADO' : isFailed ? '× FALHOU' : isProcessing ? '● TRANSMITINDO' : '○ AGUARDANDO'}
+                  </span>
+
+                  <span className="text-slate-500 text-[10px] font-medium block mt-1">
+                    Tentativas: <strong className="font-bold text-slate-700">{item.attempts || 0}/3</strong>
+                  </span>
+
+                  <span className="text-slate-400 text-[9px] font-mono block">
+                    Criado às: {new Date(item.created_at).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredQueueItems.length === 0 && (
+            <div className="p-8 text-center text-slate-400">
+              <span className="font-bold">Nenhum registro de transmissão com estes filtros.</span>
             </div>
           )}
         </div>

@@ -55,6 +55,34 @@ export async function generateAlert({
       return { success: false, error: error.message };
     }
 
+    // Enfileirar notificação de forma assíncrona tolerante a falhas
+    try {
+      const { data: settings } = await supabase
+        .from('notification_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const { error: queueError } = await supabase
+        .from('notification_queue')
+        .insert({
+          alert_id: data.id,
+          user_id: userId,
+          email_enabled: settings ? settings.email_enabled : true,
+          whatsapp_enabled: settings ? settings.whatsapp_enabled : true,
+          status: 'pending',
+          attempts: 0
+        });
+
+      if (queueError) {
+        console.warn('[ALERTADS ENGINE] Alerta gravado mas falhou ao enfileirar notificação:', queueError.message);
+      } else {
+        console.log(`[ALERTADS ENGINE] Notificação enfileirada com sucesso para o alerta: ${data.id}`);
+      }
+    } catch (nqError) {
+      console.warn('[ALERTADS ENGINE] Exceção ao enfileirar notificação na fila:', nqError);
+    }
+
     return { success: true, data: data as AlertRecord };
   } catch (err: any) {
     console.error('[ALERTADS ENGINE] Erro inesperado na geração de alerta:', err);
